@@ -1,4 +1,28 @@
-// --- Taş seti oluşturma ---
+const express = require("express");
+const http = require("http");
+const cors = require("cors");
+const { Server } = require("socket.io");
+
+const app = express();
+
+// ✅ CORS ayarı: sadece senin domainine izin ver
+app.use(cors({
+  origin: "https://cadinindiyari.com",
+  methods: ["GET", "POST"],
+  credentials: true
+}));
+
+const server = http.createServer(app);
+
+const io = new Server(server, {
+  cors: {
+    origin: "https://cadinindiyari.com",
+    methods: ["GET", "POST"],
+    credentials: true
+  }
+});
+
+// --- Okey taş seti oluşturma ---
 function createTiles() {
   const tiles = [];
   const colors = ["kırmızı", "sarı", "mavi", "siyah"];
@@ -39,10 +63,13 @@ io.on("connection", (socket) => {
   });
 
   socket.on("start_game", (roomId) => {
-    const tiles = createTiles();
+    let tiles = createTiles();
     shuffle(tiles);
     const players = distributeTiles(tiles);
-    io.to(roomId).emit("game_started", players);
+
+    io.to(roomId).emit("game_started", { players, remainingTiles: tiles.length });
+    // kalan taşları odanın state'inde tutabilirsin
+    socket.data.tiles = tiles;
   });
 
   socket.on("play_tile", (roomId, tile) => {
@@ -50,11 +77,22 @@ io.on("connection", (socket) => {
   });
 
   socket.on("draw_tile", (roomId) => {
-    const tile = tiles.pop();
-    socket.emit("tile_drawn", tile);
+    if (socket.data.tiles && socket.data.tiles.length > 0) {
+      const tile = socket.data.tiles.pop();
+      socket.emit("tile_drawn", tile);
+    }
   });
 
   socket.on("end_game", (roomId, winnerId) => {
     io.to(roomId).emit("game_ended", { winner: winnerId });
   });
+
+  socket.on("disconnect", () => {
+    console.log("Oyuncu ayrıldı:", socket.id);
+  });
+});
+
+const PORT = process.env.PORT || 10000;
+server.listen(PORT, () => {
+  console.log(`Sunucu ${PORT} portunda çalışıyor`);
 });
